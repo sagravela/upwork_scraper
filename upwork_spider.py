@@ -64,12 +64,17 @@ def scrape_data(url):
             # Data is along sections
             sections = [s.get_text() for s in soup.select('.air3-card-section')]
             # Posted time
-            posted_at = re.search(r'Posted\n(.*)ago', sections[0]).group(1).strip()
+            if 'yesterday' in sections[0]:
+                posted_at = "1 day"
+            elif 'last week' in sections[0]:
+                posted_at = "1 week"
+            else:
+                posted_at = re.search(r'Posted\n(.*)ago', sections[0]).group(1).strip()
             offer_data['posted_at'] = parse_datetime(posted_at)
             # Connections number
             offer_data['connections'] = int(re.findall(r'\d+', sections[0])[1])
             # Second section is the description
-            offer_data['description'] = sections[1].strip()
+            offer_data['description'] = sections[1].strip().replace('\n', '\\n')
             # Metadata
             client_data = soup.select_one('ul.client-activity-items')
             keys = [k.get_text().strip().replace(' ', '_').lower()[:-1] for k in client_data.select('span.title')]
@@ -89,8 +94,14 @@ def scrape_data(url):
 
 def parse_datetime(date: str) -> datetime:
     now = datetime.now()
-    splits = date.split()
-    number, unit = splits[0], splits[1]
+    # Make this check again for last viewed by the client feature.
+    if 'yesterday' in date:
+        number, unit = 1, "day"
+    elif 'last week' in date:
+        number, unit = 1, "week"
+    else:
+        splits = date.split()
+        number, unit = splits[0], splits[1]
     number = int(number)
     
     if 'second' in unit:
@@ -141,21 +152,24 @@ def main():
             if i > 1:
                 page_url += f"&page={i}"
             data.append(scrape_data(page_url))
-
-        # Save data to CSV
-        flattened_data = [item for sublist in data for item in sublist]
-        filename = args.query.replace(' ', '-')
-        with open(f'{filename}.csv', mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=list(UpworkOffer.model_fields.keys()))
-            writer.writeheader()
-            writer.writerows(flattened_data)
-        logging.info(f"Saved {len(flattened_data)} offers to {args.query.replace(' ', '-')}.csv")
+    except KeyboardInterrupt:
+        logging.info("Terminating process...")
     except Exception as e:
         logging.error(e)
         driver.close()
     finally:
-        driver.close()
-        logging.info("Driver closed.")
+        # Save data to CSV
+        if data:
+            flattened_data = [item for sublist in data for item in sublist]
+            filename = args.query.replace(' ', '-')
+            with open(f'{filename}.csv', mode='w', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=list(UpworkOffer.model_fields.keys()))
+                writer.writeheader()
+                writer.writerows(flattened_data)
+            logging.info(f"Saved {len(flattened_data)} offers to {args.query.replace(' ', '-')}.csv")
+        if driver:
+            driver.close()
+            logging.info("Driver closed.")
 
 if __name__ == '__main__':
     main()
