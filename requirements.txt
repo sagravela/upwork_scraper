@@ -1,0 +1,5 @@
+DrissionPage
+bs4
+urllib3
+pydantic
+dotenv
