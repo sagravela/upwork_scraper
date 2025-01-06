@@ -12,7 +12,7 @@ class UpworkOffer(BaseModel):
     title: str
     connections: int
     posted_at: datetime
-    proposals: str = 0
+    proposals: int = 0
     last_viewed_by_client: datetime = None
     interviewing: int = None
     invites_sent: int = 0
@@ -64,15 +64,15 @@ def scrape_data(url):
             # Data is along sections
             sections = [s.get_text() for s in soup.select('.air3-card-section')]
             # Posted time
-            if 'yesterday' in sections[0]:
-                posted_at = "1 day"
-            elif 'last week' in sections[0]:
-                posted_at = "1 week"
-            else:
-                posted_at = re.search(r'Posted\n(.*)ago', sections[0]).group(1).strip()
+            posted_at = re.search(r'Posted\s*\n*([\w\d]+\s+\w+)', sections[0]).group(1).strip()
             offer_data['posted_at'] = parse_datetime(posted_at)
-            # Connections number
-            offer_data['connections'] = int(re.findall(r'\d+', sections[0])[1])
+            # Connections number. There are two possible structures in the DOM
+            connections_one = re.search(r'Send a proposal for: (\d+) Connect', sections[0])
+            connections_two = re.search(r'(\d+) required Connect', sections[0])
+            if connections_one:
+                offer_data['connections'] = connections_one.group(1)
+            else:
+                offer_data['connections'] = connections_two.group(1)
             # Second section is the description
             offer_data['description'] = sections[1].strip().replace('\n', '\\n')
             # Metadata
@@ -81,6 +81,8 @@ def scrape_data(url):
             values = [v.get_text().strip() for v in client_data.select('span.value') + client_data.select('div.value')]
             offer_data.update(zip(keys, values))
 
+            # Parse proposals to integer
+            offer_data['proposals'] = int(re.findall(r'\d+', offer_data['proposals'])[-1])
             # Parse last viewed by the client to datetime
             if 'last_viewed_by_client' in offer_data.keys():
                 offer_data['last_viewed_by_client'] = parse_datetime(offer_data['last_viewed_by_client'])
